@@ -14,6 +14,7 @@ __posixFile = 'zeromq-4.0.3.tar.gz'
 __posixSha256Checksum = '\x57\xfa\x92\x05\xbd\xa2\x81\x3c\x6f\x76\x45\xd1\xd6\x01\x68\x38\xd2\x7b\xac\x83\x3c\x1e\xde\xba\xec\xc7\xf3\x62\x61\x44\x71\x1a'
 __ntFile = 'zeromq-4.0.3.zip'
 __ntSha256Checksum = '\x87\x54\x18\x8b\x0d\x11\x2f\xa4\x14\x83\x5e\xea\x0e\xf2\xfa\x24\xad\x3c\x27\x1c\x89\xf3\x04\x72\x88\x4e\x59\xec\x0d\x15\xdf\xae'
+__cxxHeaderUrl = 'https://raw.githubusercontent.com/zeromq/cppzmq/master/%s'
 __cxxHeaderFile = 'zmq.hpp'
 __srcDir = 'src'
 
@@ -85,6 +86,25 @@ def prepare(prepCtx):
 	prepCtx.fatal('Unsupported OS %s' % os.name)
     os.rename(extractPath, srcPath)
     prepCtx.end_msg(srcPath)
+    cxxHeaderPath = os.path.join(prepCtx.path.abspath(), __cxxHeaderFile)
+    cxxHeaderUrl = __cxxHeaderUrl % __cxxHeaderFile
+    if os.access(cxxHeaderPath, os.R_OK):
+	prepCtx.start_msg('Using existing Cxx header file')
+	prepCtx.end_msg(cxxHeaderPath)
+    else:
+	prepCtx.start_msg('Downloading %s' % cxxHeaderUrl)
+	triesRemaining = 10
+	while triesRemaining > 1:
+	    try:
+		urllib.urlretrieve(cxxHeaderUrl, cxxHeaderPath)
+		break
+	    except urllib.ContentTooShortError:
+		triesRemaining -= 1
+		if os.path.exists(cxxHeaderPath):
+		    os.remove(cxxHeaderPath)
+	else:
+	    prepCtx.fatal('Could not download %s' % cxxHeaderUrl)
+	prepCtx.end_msg('Saved to %s' % cxxHeaderPath)
 
 def configure(confCtx):
     confCtx.load('dep_resolver')
@@ -130,4 +150,10 @@ def build(buildCtx):
 	confCtx.fatal('Unsupported OS %s' % os.name)
     if returnCode != 0:
 	buildCtx.fatal('Zeromq build failed: %d' % returnCode)
+    cxxHeaderTgt = os.path.join(buildCtx.path.abspath(), 'include', __cxxHeaderFile)
+    if os.path.exists(cxxHeaderTgt):
+	os.remove(cxxHeaderTgt)
+    cxxHeaderSrc = os.path.join(buildCtx.path.abspath(), __cxxHeaderFile)
+    if os.path.exists(cxxHeaderSrc):
+	shutil.copy2(cxxHeaderSrc, os.path.join(buildCtx.path.abspath(), 'include'))
     status.setSuccess()
