@@ -9,7 +9,8 @@ from waflib import Logs
 from waflib.extras.preparation import PreparationContext
 from waflib.extras.build_status import BuildStatus
 from waflib.extras.filesystem_utils import removeSubdir
-from waflib.extras.url_utils import tryDownload, syncRemoteFile
+from waflib.extras.mirror import MirroredTarFile, MirroredZipFile
+from waflib.extras.url_utils import tryDownload
 
 __downloadUrl = 'http://download.zeromq.org/%s'
 __posixFile = 'zeromq-4.0.3.tar.gz'
@@ -31,31 +32,26 @@ def prepare(prepCtx):
 	prepCtx.msg('Preparation already complete', 'skipping')
 	return
     if os.name == 'posix':
-	filePath = os.path.join(prepCtx.path.abspath(), __posixFile)
-	url = __downloadUrl % __posixFile
-	sha256Checksum = __posixSha256Checksum
+	file = MirroredTarFile(
+		__posixSha256Checksum,
+		__downloadUrl % __posixFile,
+		os.path.join(prepCtx.path.abspath(), __posixFile))
     elif os.name == 'nt':
-	filePath = os.path.join(prepCtx.path.abspath(), __ntFile)
-	url = __downloadUrl % __ntFile
-	sha256Checksum = __ntSha256Checksum
+	file = MirroredZipFile(
+		__ntSha256Checksum,
+		__downloadUrl % __ntFile,
+		os.path.join(prepCtx.path.abspath(), __ntFile))
     else:
 	prepCtx.fatal('Unsupported OS %s' % os.name)
-    prepCtx.msg('Synchronising', url)
-    if syncRemoteFile(sha256Checksum, url, filePath):
-	prepCtx.msg('Saved to', filePath)
+    prepCtx.msg('Synchronising', file.getSrcUrl())
+    if file.sync(10):
+	prepCtx.msg('Saved to', file.getTgtPath())
     else:
 	prepCtx.fatal('Synchronisation failed')
     extractDir = 'zeromq-4.0.3'
     removeSubdir(prepCtx.path.abspath(), __srcDir, extractDir, 'bin', 'lib', 'include')
     prepCtx.start_msg('Extracting files to')
-    if os.name == 'posix':
-	handle = tarfile.open(filePath, 'r:*')
-	handle.extractall(prepCtx.path.abspath())
-    elif os.name == 'nt':
-	handle = zipfile.ZipFile(filePath, 'r')
-	handle.extractall(prepCtx.path.abspath())
-    else:
-	prepCtx.fatal('Unsupported OS %s' % os.name)
+    file.extract(prepCtx.path.abspath())
     os.rename(extractDir, __srcDir)
     prepCtx.end_msg(os.path.join(prepCtx.path.abspath(), __srcDir))
     cxxHeaderPath = os.path.join(prepCtx.path.abspath(), __cxxHeaderFile)
